@@ -1,47 +1,53 @@
-[tool.poetry]
-name = "nonebot-plugin-majsoul"
-version = "0.2.10"
-description = "NoneBot2 雀魂信息查询插件"
-authors = ["ssttkkl <huang.wen.long@hotmail.com>"]
-license = "AGPL-3.0"
-readme = "README.md"
-packages = [
-    { include = "nonebot_plugin_majsoul", from = "src" },
-]
-
-[tool.poetry.dependencies]
-python = "^3.9"
-nonebot2 = {extras = ["httpx"], version = ">=2.0.0"}
-nonebot-plugin-send-anything-anywhere = ">=0.2.1"
-ssttkkl-nonebot-utils = ">=0.1.23"
-tzlocal = ">=4.2"
-monthdelta = ">=0.9.1"
-icmplib = ">=3.0.3"
-matplotlib = ">=3.6.2"
-tensoul = ">=0.1.0"
-nonebot-plugin-orm = ">=0.7.0, <1.0.0"
-nonebot-plugin-user = "^0.4.3"
-nonebot-plugin-access-control-api = "^1.2.1"
-
-[tool.poetry.group.dev.dependencies]
-setuptools = "^68.1.2"
-nb-cli = "*"
-
-nonebug = "^0.3.5"
-pytest = "^7.4.3"
-pytest-asyncio = "^0.21.1"
-pytest-cov = "^4.1.0"
-pydantic-settings = "^2.4.0"
-
-nonebot-adapter-onebot = "*"
-nonebot-adapter-console = "*"
-nonebot2 = {extras = ["fastapi"], version = ">=2.0.0"}
-nonebot-plugin-orm = {extras = ["default"], version = "^0.7.6"}
-
 [tool.nonebot]
 plugins = ["nonebot_plugin_majsoul"]
 plugin_dirs = []
 
+[tool.pdm]
+distribution = true
+
+[tool.pdm.build]
+includes = ["src/nonebot_plugin_majsoul"]
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[project]
+name = "nonebot-plugin-majsoul"
+version = "0.2.10"
+description = "NoneBot2 雀魂信息查询插件"
+authors = [
+    {name = "ssttkkl", email = "huang.wen.long@hotmail.com"},
+]
+dependencies = [
+    "nonebot2[httpx]>=2.0.0",
+    "nonebot-plugin-send-anything-anywhere>=0.2.1",
+    "ssttkkl-nonebot-utils>=0.1.23",
+    "tzlocal>=4.2",
+    "monthdelta>=0.9.1",
+    "icmplib>=3.0.3",
+    "matplotlib>=3.6.2",
+    "tensoul>=0.1.0",
+    "nonebot-plugin-orm<1.0.0,>=0.7.0",
+    "nonebot-plugin-user<1.0.0,>=0.4.3",
+    "nonebot-plugin-access-control-api<2.0.0,>=1.2.1",
+]
+requires-python = "<4.0,>=3.9"
+readme = "README.md"
+license = {text = "AGPL-3.0"}
+
+
+[dependency-groups]
+dev = [
+    "setuptools<69.0.0,>=68.1.2",
+    "nb-cli",
+    "nonebug<1.0.0,>=0.3.5",
+    "pytest<8.0.0,>=7.4.3",
+    "pytest-asyncio<1.0.0,>=0.21.1",
+    "pytest-cov<5.0.0,>=4.1.0",
+    "pydantic-settings<3.0.0,>=2.4.0",
+    "nonebot-adapter-onebot",
+    "nonebot-adapter-console",
+    "nonebot2[fastapi]>=2.0.0",
+    "nonebot-plugin-orm[default]<1.0.0,>=0.7.6",
+]

@@ -144,3 +144,5 @@ dmypy.json
 bot.py
 .env.*
 *.ttf
+
+.pdm-*

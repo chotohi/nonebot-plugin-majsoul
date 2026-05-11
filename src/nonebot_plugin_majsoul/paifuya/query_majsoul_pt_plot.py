@@ -36,6 +36,7 @@ from matplotlib import font_manager
 PLUGIN_DIR = Path(__file__).parent
 font_path = str(PLUGIN_DIRfonts / "fonts" / "NotoSansCJK-Regular.otf")
 
+
 # 注册字体
 font_manager.fontManager.addfont(font_path)
 

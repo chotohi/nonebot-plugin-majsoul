@@ -73,7 +73,6 @@ def make_handler(player_num: PlayerNum):
 
     return majsoul_records
 
-
 four_player_majsoul_records_matcher = on_command("雀魂最近对局", aliases={'雀魂对局', '雀魂牌谱'})
 query_records_service.patch_matcher(four_player_majsoul_records_matcher)
 four_player_majsoul_records_matcher.__help_info__ = f"{default_command_start}雀魂最近对局 <雀魂账号> [<房间类型>]"

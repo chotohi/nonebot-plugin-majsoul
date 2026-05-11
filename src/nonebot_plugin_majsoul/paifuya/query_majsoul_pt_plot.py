@@ -3,15 +3,12 @@ from asyncio import wait_for
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Sequence, Optional, Text
-
-import matplotlib.pyplot as plt
 from httpx import HTTPStatusError
-from matplotlib import font_manager
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from nonebot import on_command
 from nonebot.internal.adapter import Event
-from nonebot_plugin_saa import MessageFactory, Image
+from nonebot_plugin_saa import MessageFactory, Text, Image
 from ssttkkl_nonebot_utils.errors.errors import BadRequestError, QueryError
 from ssttkkl_nonebot_utils.interceptor.handle_error import handle_error
 from ssttkkl_nonebot_utils.interceptor.with_handling_reaction import with_handling_reaction
@@ -32,15 +29,22 @@ from ..ac import pt_plot_service
 from ..config import conf
 from ..errors import error_handlers
 from ..utils.my_executor import run_in_my_executor
+from pathlib import Path
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
 
-if conf.majsoul_font:
-    plt.rcParams['font.sans-serif'] = conf.majsoul_font
-elif sys.platform == 'win32':
-    plt.rcParams['font.sans-serif'] = "Microsoft YaHei"
+PLUGIN_DIR = Path(__file__).parent
+font_path = str(PLUGIN_DIRfonts / "fonts" / "NotoSansCJK-Regular.otf")
 
-if conf.majsoul_font_path:
-    font_manager.fontManager.addfont(conf.majsoul_font_path)
+# 注册字体
+font_manager.fontManager.addfont(font_path)
 
+# 获取字体真实名字（关键！避免写错名字）
+font_name = font_manager.FontProperties(fname=font_path).get_name()
+
+# 强制全局使用
+plt.rcParams['font.family'] = font_name
+plt.rcParams['axes.unicode_minus'] = False
 
 def make_handler(player_num: PlayerNum):
     async def majsoul_pt_plot(event: Event):
@@ -191,6 +195,7 @@ async def handle_majsoul_pt_plot(nickname: str, player_num: PlayerNum, *,
                                  start_time: Optional[datetime] = None,
                                  end_time: Optional[datetime] = None,
                                  limit: Optional[int] = None):
+
     if player_num == PlayerNum.four:
         room_rank = all_four_player_room_rank
     elif player_num == PlayerNum.three:
@@ -202,64 +207,68 @@ async def handle_majsoul_pt_plot(nickname: str, player_num: PlayerNum, *,
         end_time = datetime.now(timezone.utc)
 
     players = await api[player_num].search_player(nickname)
+
+    # 强制：区分大小写 + 精确匹配
+    players = [p for p in players if p.nickname == nickname]
     if len(players) == 0:
         raise QueryError("没有查询到该角色在金之间以上的对局数据呢~")
 
-    player = players[0]
+    api_start_time = datetime.fromisoformat("2010-01-01T00:00:00").astimezone(timezone.utc)
 
-    msg = ""
-    if len(players) > 1:
-        msg += "查询到多条角色昵称呢~，若输出不是您想查找的昵称，请补全查询昵称。\n"
-    msg += f"昵称：{player.nickname}\n"
+    sent_any = False
 
-    try:
+    for player in players:
+
         records = []
 
-        api_start_time = datetime.fromisoformat("2010-01-01T00:00:00").astimezone(timezone.utc)
-        async for r in api[player_num].player_records_stream(
-                player.id, api_start_time, end_time, room_rank, descending=True):
-            # 比limit多取一个，用于获取在此之前的段位及PT
-            if limit is not None and len(records) > limit:
-                break
-
-            records.append(r)
-
-            # 同样多取一个，用于获取在此之前的段位及PT
-            if start_time is not None and r.start_time < start_time:
-                limit = len(records) - 1
-                break
-
-        predecessor_record = None
-        if limit:
-            if len(records) > limit:
-                predecessor_record = records[limit]
-            records = records[:limit]
-
-        records.reverse()
-
-        if predecessor_record is not None:
-            player_stats_at_start = await api[player_num].player_stats(
-                player.id, predecessor_record.start_time, predecessor_record.end_time, room_rank)
-            initial_level = player_stats_at_start.level
-        else:
-            initial_level = None
-            for p in records[0].players:
-                if p.id == player.id:
-                    initial_level = PlayerLevel(id=p.rank, score=p.rank.max_pt // 2, delta=0)
+        try:
+            async for r in api[player_num].player_records_stream(
+                player.id,
+                api_start_time,
+                end_time,
+                room_rank,
+                descending=True
+            ):
+                if limit is not None and len(records) >= limit:
                     break
-    except HTTPStatusError as e:
-        if e.response.status_code == 404:
-            raise QueryError("没有查询到该角色在金之间以上的对局数据呢~")
-        else:
-            raise e
+                records.append(r)
 
-    if not records:
-        await MessageFactory(
-            Text(msg)
-        ).send(reply=True)
-    else:
+            records.reverse()
+
+        except HTTPStatusError as e:
+            if e.response.status_code != 404:
+                raise e
+            continue
+
+        if not records:
+            continue
+
+        # 获取初始段位
+        initial_level = None
+        for p in records[0].players:
+            if p.id == player.id:
+                initial_level = PlayerLevel(
+                    id=p.rank,
+                    score=p.rank.max_pt // 2,
+                    delta=0
+                )
+                break
+
+        if initial_level is None:
+            continue
+
+        
+        msg = f"昵称：{player.nickname} (id={player.id})\n对局数：{len(records)}"
+
         with BytesIO() as bio:
             await run_in_my_executor(draw, bio, player_num, player, initial_level, records)
-            await MessageFactory(
-                Image(bio)
-            ).send()
+
+            await MessageFactory([
+                Text(msg),
+                Image(bio.getvalue())
+            ]).send()
+
+        sent_any = True
+
+    if not sent_any:
+        raise QueryError("所有同名账号均没有有效对局数据")

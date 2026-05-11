@@ -39,7 +39,7 @@ font_path = str(PLUGIN_DIRfonts / "fonts" / "NotoSansCJK-Regular.otf")
 # 注册字体
 font_manager.fontManager.addfont(font_path)
 
-# 获取字体真实名字（关键！避免写错名字）
+# 获取字体真实名字
 font_name = font_manager.FontProperties(fname=font_path).get_name()
 
 # 强制全局使用

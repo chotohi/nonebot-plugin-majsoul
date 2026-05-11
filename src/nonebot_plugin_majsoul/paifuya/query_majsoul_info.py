@@ -101,11 +101,15 @@ three_player_majsoul_info = handle_error(error_handlers)(three_player_majsoul_in
 three_player_majsoul_info_matcher.append_handler(three_player_majsoul_info)
 
 
-async def handle_majsoul_info(nickname: str, player_num: PlayerNum, *,
-                              room_rank: Optional[AbstractSet[RoomRank]] = None,
-                              start_time: Optional[datetime] = None,
-                              end_time: Optional[datetime] = None,
-                              limit: Optional[int] = None):
+async def handle_majsoul_info(
+    nickname: str,
+    player_num: PlayerNum,
+    *,
+    room_rank: Optional[AbstractSet[RoomRank]] = None,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    limit: Optional[int] = None
+):
     default_start_time = start_time is None
     default_end_time = end_time is None
     default_limit = limit is None
@@ -122,75 +126,101 @@ async def handle_majsoul_info(nickname: str, player_num: PlayerNum, *,
     if end_time is None:
         end_time = datetime.now(timezone.utc)
 
-    with StringIO() as sio:
-        players = await api[player_num].search_player(nickname)
-        if len(players) == 0:
-            raise QueryError("没有查询到该角色在金之间以上的对局数据呢~")
-        else:
-            if len(players) > 1:
-                sio.write("查询到多条角色昵称呢~，若输出不是您想查找的昵称，请补全查询昵称。\n")
+    sio = StringIO()
 
-            sio.write(f"昵称：{players[0].nickname}\n\n")
+    #  查询玩家
+    players = await api[player_num].search_player(nickname)
 
-            try:
-                if limit is not None:
-                    records = await api[player_num].player_records(
-                        players[0].id,
-                        start_time,
-                        end_time,
-                        room_rank,
-                        limit=limit,
-                        descending=True)
-                    start_time = records[-1].start_time
+    # 优先完全匹配
+    exact_players = [p for p in players if p.nickname == nickname]
+    if exact_players:
+        players = exact_players
 
-                player_stats = create_task(api[player_num].player_stats(
-                    players[0].id,
+    if not players:
+        raise QueryError("没有查询到该角色在金之间以上的对局数据呢~")
+
+    if len(players) > 1:
+        sio.write("查询到多个同名账号，已分别统计：\n\n")
+
+    room_rank_text = map_room_rank(room_rank)
+
+    # 多账号逐个统计
+    for idx, p in enumerate(players):
+        sio.write(f"====== 昵称：{p.nickname} ======\n")
+
+        try:
+            if limit is not None:
+                records = await api[player_num].player_records(
+                    p.id,
                     start_time,
                     end_time,
-                    room_rank))
-                player_extended_stats = create_task(api[player_num].player_extended_stats(
-                    players[0].id,
-                    start_time,
-                    end_time,
-                    room_rank))
-
-                player_stats = await player_stats
-                player_extended_stats = await player_extended_stats
-            except HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    player_stats = None
+                    room_rank,
+                    limit=limit,
+                    descending=True
+                )
+                if records:
+                    start_time_used = records[-1].start_time
                 else:
-                    raise e
-
-            room_rank_text = map_room_rank(room_rank)
-            if player_stats is None:
-                raise QueryError(f"没有查询到{room_rank_text}的对局数据呢~")
+                    start_time_used = start_time
             else:
-                map_player_stats(sio, player_stats, room_rank_text, player_num)
-                sio.write('\n')
-                map_player_extended_stats(sio, player_extended_stats, room_rank_text)
+                start_time_used = start_time
 
-            sio.write("\nPS：本数据不包含金之间以下对局以及2019.11.29之前的对局")
+            stats_task = create_task(api[player_num].player_stats(
+                p.id,
+                start_time_used,
+                end_time,
+                room_rank
+            ))
+            ext_task = create_task(api[player_num].player_extended_stats(
+                p.id,
+                start_time_used,
+                end_time,
+                room_rank
+            ))
 
-            if conf.majsoul_send_link:
-                with StringIO() as url:
-                    if player_num == PlayerNum.four:
-                        url.write(f"https://amae-koromo.sapk.ch/player/{players[0].id}/")
-                    else:
-                        url.write(f"https://ikeda.sapk.ch/player/{players[0].id}/")
-                    url.write(".".join(map(lambda x: str(x.value), room_rank)))
-                    if not default_start_time:
-                        url.write("/")
-                        url.write(start_time.strftime("%Y-%m-%d"))
-                    if not default_end_time:
-                        url.write("/")
-                        url.write(end_time.strftime("%Y-%m-%d"))
-                    if not default_limit:
-                        url.write(f"?limit={limit}")
+            player_stats = await stats_task
+            player_extended_stats = await ext_task
 
-                    sio.write("\n")
-                    sio.write("更多信息：")
-                    sio.write(url.getvalue())
+        except HTTPStatusError as e:
+            if e.response.status_code == 404:
+                sio.write("没有该账号的对局数据\n\n")
+                continue
+            else:
+                raise e
 
-        msg = sio.getvalue()
-        await MessageFactory(Text(msg)).send(reply=True)
+        if player_stats is None:
+            sio.write(f"没有查询到{room_rank_text}的对局数据呢~\n\n")
+            continue
+
+        # 写入统计信息
+        map_player_stats(sio, player_stats, room_rank_text, player_num)
+        sio.write("\n")
+        map_player_extended_stats(sio, player_extended_stats, room_rank_text)
+
+        sio.write("\n\n")
+
+        # 链接
+        if conf.majsoul_send_link:
+            sio.write("更多信息：")
+
+            if player_num == PlayerNum.four:
+                url = f"https://amae-koromo.sapk.ch/player/{p.id}/"
+            else:
+                url = f"https://ikeda.sapk.ch/player/{p.id}/"
+
+            url += ".".join(map(lambda x: str(x.value), room_rank))
+
+            if not default_start_time:
+                url += "/" + start_time.strftime("%Y-%m-%d")
+            if not default_end_time:
+                url += "/" + end_time.strftime("%Y-%m-%d")
+            if not default_limit:
+                url += f"?limit={limit}"
+
+            sio.write(url)
+            sio.write("\n\n")
+
+    # 输出
+    msg = sio.getvalue()
+    await MessageFactory(Text(msg.strip())).send(reply=True)
+    

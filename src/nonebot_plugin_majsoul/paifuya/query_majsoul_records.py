@@ -145,9 +145,7 @@ async def handle_majsoul_records(
 
     msgs: List[MessageFactory] = []
 
-    # =========================
-    # 1. 查询玩家列表
-    # =========================
+    # 查询玩家列表
     if nickname.isdigit():
         players = [await api[player_num].search_player_by_uid(int(nickname))]
     else:
@@ -158,17 +156,13 @@ async def handle_majsoul_records(
         if exact_players:
             players = exact_players
 
-    # =========================
-    # 2. 没找到玩家
-    # =========================
+    # 没找到玩家
     if not players:
         msgs.append(MessageFactory(Text("没有查询到该角色在金之间以上的对局数据呢~")))
         await msgs[0].send(reply=True)
         return
 
-    # =========================
-    # 3. 多玩家逐个查询
-    # =========================
+    #  多玩家逐个查询
     all_text_blocks = []
     all_images = []
 
@@ -196,24 +190,18 @@ async def handle_majsoul_records(
             all_text_blocks.append("没有查询到对局数据\n")
             continue
 
-        # =========================
-        # 4. 绘图
-        # =========================
+        #  绘图
         with BytesIO() as bio:
             await run_in_my_executor(draw_records_plot, bio, records, p.id)
             all_images.append(bio.getvalue())
 
-        # =========================
-        # 5. 解析每局记录
-        # =========================
+        # 解析每局记录
         for r in records:
             with StringIO() as sio:
                 map_game_record(sio, r, p.id)
                 all_text_blocks.append(sio.getvalue().strip() + "\n")
 
-    # =========================
-    # 6. 汇总输出文本
-    # =========================
+    # 汇总输出文本
     msg = ""
 
     if len(players) > 1:
@@ -223,15 +211,11 @@ async def handle_majsoul_records(
 
     msgs.append(MessageFactory(Text(msg.strip())))
 
-    # =========================
-    # 7. 输出图片
-    # =========================
+    # 输出图片
     for img in all_images:
         msgs.append(MessageFactory(Image(img)))
 
-    # =========================
-    # 8. 发送
-    # =========================
+    # 发送
     if len(msgs) == 1:
         await msgs[0].send(reply=True)
     else:

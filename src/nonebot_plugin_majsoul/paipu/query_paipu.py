@@ -77,7 +77,6 @@ else:
 
         uploader = platform_func(bot).upload_file
 
-        # ✅ 关键修复：兼容 async / sync 两种实现
         import inspect
 
         if inspect.iscoroutinefunction(uploader):
